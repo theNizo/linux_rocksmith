@@ -13,6 +13,7 @@ Usage: ./patch-nixos-sh [ OPTIONS ]
 -p, --protonpath=   Location of the Proton version you want to use
 -P, --protontype=   \"files\" or \"dist\" - which one your chosen Proton version uses
 -C, --cdlc          Patch the game for use with CDLC too
+-M, --mods          Run Lovrom8's Mod Installer
 "
 	exit 0
 fi
@@ -32,6 +33,7 @@ WINEASIODLLS=(
 LAUNCH_OPTIONS="LD_PRELOAD=/usr/lib32/libjack.so PIPEWIRE_LATENCY=256/48000 %command%"
 LAUNCH_OPTIONS="LD_PRELOAD=/usr/lib32/librsshim.so:/usr/lib32/libjack.so PIPEWIRE_LATENCY=256/48000 %command%"
 CDLC_INSTALLER="RS2014-CDLC-Installer.exe"
+MODS_INSTALLER="RS2014-Mod-Installer.exe"
 
 # Defaults
 STEAMPATH="/home/${USER}/.steam/steam"
@@ -43,6 +45,7 @@ PROTONPATH="${STEAMPATH}/steamapps/common/${PROTONVER}"
 WINE="${PROTONPATH}/${FILES_OR_DIST}/bin/wine"
 WINE64="${PROTONPATH}/${FILES_OR_DIST}/bin/wine64"
 INSTALL_CDLC=false
+INSTALL_MODS=false
 PROTONPATH_SET=false
 RSASIOVER_SET=false
 
@@ -158,8 +161,10 @@ parse_args() {
 		--protonpath=*) normalized+=("-p" "${1#--protonpath=}") ;;
 		--protontype=*) normalized+=("-P" "${1#--protontype=}") ;;
 		--cdlc) normalized+=("-C") ;;
+		--mods) normalized+=("-M") ;;
 		-C) normalized+=("-C") ;;
-		-s|-w|-r|-p|-P)
+		-M) normalized+=("-M") ;;
+		-s | -w | -r | -p | -P)
 			if [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
 				echo "Error: $1 requires an argument" >&2
 				exit 2
@@ -182,7 +187,7 @@ parse_args() {
 
 	PROTONTYPE_SET=false
 
-	while getopts ":s:w:r:p:P:C" opt; do
+	while getopts ":s:w:r:p:P:CM" opt; do
 		case "$opt" in
 		s) STEAMPATH="$OPTARG" ;;
 		w) WINEPREFIX="$OPTARG" ;;
@@ -210,6 +215,7 @@ parse_args() {
 			esac
 			;;
 		C) INSTALL_CDLC=true ;;
+		M) INSTALL_MODS=true ;;
 		:)
 			echo "Option -$OPTARG requires an argument" >&2
 			exit 2
@@ -430,13 +436,25 @@ install_cdlc() {
 
 	print_blue "========= CDLC ========="
 
-	echo "[CDLC] Install CDLC Enabler"
-	if [ ! -f "${CDLC_INSTALLER}" ]; then
-		wget "https://ignition4.customsforge.com/tools/download/cdlc-enabler" -O "${CDLC_INSTALLER}" 2>&1
-	fi
+	echo "[CDLC] Download CDLC Enabler"
+	wget "https://ignition4.customsforge.com/tools/download/cdlc-enabler" -O "${WINEPREFIX}drive_c/${CDLC_INSTALLER}" 2>&1
 
 	echo "[CDLC] Running CDLC Enabler"
-	"${WINE}" "${CDLC_INSTALLER}" >/dev/null 2>&1
+	"${WINE}" "${WINEPREFIX}drive_c/${CDLC_INSTALLER}" >/dev/null 2>&1
+}
+
+install_mods() {
+	if [ "$INSTALL_MODS" = false ]; then
+		return
+	fi
+
+	print_blue "======== Mods ========"
+
+	echo "[Mods] Download Mod Installer"
+	wget "https://github.com/Lovrom8/RSMods/releases/latest/download/RS2014-Mod-Installer.exe" -O "${WINEPREFIX}drive_c/${MODS_INSTALLER}" 2>&1
+
+	echo "[Mods] Running Mod Installer"
+	"${WINE}" "${WINEPREFIX}drive_c/${MODS_INSTALLER}" >/dev/null 2>&1
 }
 
 finalise() {
@@ -463,9 +481,6 @@ finalise() {
 clean() {
 	rm "release-${RSASIOVER}.zip"
 	rm -rf RS_ASIO
-	if [ "$INSTALL_CDLC" = true ]; then
-		rm "${CDLC_INSTALLER}"
-	fi
 }
 
 ################### Execute ###################
@@ -478,5 +493,6 @@ check_and_prepare
 patch_wineasio
 patch_rs_asio
 install_cdlc
+install_mods
 clean
 finalise
